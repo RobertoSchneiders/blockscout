@@ -151,22 +151,57 @@ defmodule Explorer.Chain.TokenTransfer do
     )
   end
 
-  def where_address_fields_match(query, address_hash, :from) do
-    query
-    |> join(:left, [transaction], tt in assoc(transaction, :token_transfers))
-    |> where([_transaction, tt], tt.from_address_hash == ^address_hash)
+  @doc """
+  Adds the given query a `where` clause to identify if there is a token
+  transfer related to the hash.
+  """
+  def or_where_address_fields_match(query, :to, address_bytes) do
+    or_where(
+      query,
+      [t],
+      t.hash in fragment(
+        ~s"""
+        SELECT tt.transaction_hash
+        FROM "token_transfers" AS tt
+        WHERE (tt."to_address_hash" = ?)
+        LIMIT 1
+        """,
+        ^address_bytes
+      )
+    )
   end
 
-  def where_address_fields_match(query, address_hash, :to) do
-    query
-    |> join(:left, [transaction], tt in assoc(transaction, :token_transfers))
-    |> where([_transaction, tt], tt.to_address_hash == ^address_hash)
+  def or_where_address_fields_match(query, :from, address_bytes) do
+    or_where(
+      query,
+      [t],
+      t.hash in fragment(
+        ~s"""
+        SELECT tt.transaction_hash
+        FROM "token_transfers" AS tt
+        WHERE (tt."from_address_hash" = ?)
+        LIMIT 1
+        """,
+        ^address_bytes
+      )
+    )
   end
 
-  def where_address_fields_match(query, address_hash, _) do
-    query
-    |> join(:left, [transaction], tt in assoc(transaction, :token_transfers))
-    |> where([_transaction, tt], tt.to_address_hash == ^address_hash or tt.from_address_hash == ^address_hash)
+  def or_where_address_fields_match(query, _, address_bytes) do
+    or_where(
+      query,
+      [t],
+      t.hash in fragment(
+        ~s"""
+        SELECT tt.transaction_hash
+        FROM "token_transfers" AS tt
+        WHERE ((tt."to_address_hash" = ?) OR (tt."from_address_hash" = ?))
+        LIMIT 1
+        """,
+        ^address_bytes,
+        ^address_bytes
+      )
+    )
   end
 
   @doc """

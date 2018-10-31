@@ -218,38 +218,15 @@ defmodule Explorer.Chain do
     necessity_by_association = Keyword.get(options, :necessity_by_association, %{})
     paging_options = Keyword.get(options, :paging_options, @default_paging_options)
 
-    transaction_matches =
-      direction
-      |> case do
-        :from -> [:from_address_hash]
-        :to -> [:to_address_hash, :created_contract_address_hash]
-        _ -> [:from_address_hash, :to_address_hash, :created_contract_address_hash]
-      end
-      |> Enum.map(fn address_field ->
-        paging_options
-        |> fetch_transactions()
-        |> Transaction.where_address_fields_match(address_hash, address_field)
-        |> join_associations(necessity_by_association)
-        |> Transaction.preload_token_transfers(address_hash)
-        |> Repo.all()
-        |> MapSet.new()
-      end)
+    {:ok, address_bytes} = Explorer.Chain.Hash.Address.dump(address_hash)
 
-    token_transfer_matches =
-      paging_options
-      |> fetch_transactions()
-      |> TokenTransfer.where_address_fields_match(address_hash, direction)
-      |> join_associations(necessity_by_association)
-      |> Transaction.preload_token_transfers(address_hash)
-      |> Repo.all()
-      |> MapSet.new()
-
-    transaction_matches
-    |> Enum.reduce(token_transfer_matches, &MapSet.union/2)
-    |> MapSet.to_list()
-    |> Enum.sort_by(& &1.index, &>=/2)
-    |> Enum.sort_by(& &1.block_number, &>=/2)
-    |> Enum.slice(0..paging_options.page_size)
+    paging_options
+    |> fetch_transactions()
+    |> Transaction.where_address_filters(address_hash, direction)
+    |> TokenTransfer.or_where_address_fields_match(direction, address_bytes)
+    |> join_associations(necessity_by_association)
+    |> Transaction.preload_token_transfers(address_hash)
+    |> Repo.all()
   end
 
   @doc """
